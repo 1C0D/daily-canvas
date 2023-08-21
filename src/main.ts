@@ -1,7 +1,7 @@
 import moment from 'moment';
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, normalizePath } from 'obsidian';
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, WorkspaceLeaf, WorkspaceSidedock, normalizePath } from 'obsidian';
 import { unlink } from 'fs/promises'
-import { basename} from "path";
+import { basename } from "path";
 // Remember to rename these classes and interfaces!
 
 interface DailyCanvasSettings {
@@ -20,10 +20,21 @@ export default class DailyCanvas extends Plugin {
 
 		this.addRibbonIcon('pen-tool', 'Daily Canvas', async () => {
 			const { workspace } = (this.app as any)
+			// add new active tab
+			const title = `${moment().format("YYYY-MM-DD")}.canvas`
+			const files = this.app.vault.getFiles()
+			for (const file of files) {
+				if (file.name === title) {
+					await workspace.activeLeaf.openFile(file)
+					return
+				}
+			}
+
 			const leaf = await workspace.getLeaf('tab')
 				.setViewState({
-					active: true, // same as leaf.reveal()
-				}); //new active tab 
+					active: true,
+				});
+
 			await (this.app as any).commands.executeCommandById(
 				"canvas:new-file"
 			);
@@ -31,30 +42,33 @@ export default class DailyCanvas extends Plugin {
 			const path = "tutu.canvas"
 			setTimeout(async () => {
 				const file = workspace.getActiveFile()
-				const fullPath = normalizePath(await (this.app as any).vault.adapter.getFullPath(file.path))
-				// const oldPath = workspace.activeLeaf.view.file.path
-				workspace.activeLeaf.view.file.path = path
-				workspace.activeLeaf.detach()
 				await this.app.fileManager.renameFile(
-					file as TFile, `tutu.canvas`)
-				this.deleteFile(fullPath)
-				const leaf = await workspace.getLeaf('tab')
-					.setViewState({
-						active: true,
-					});
-				
-				const newPath = normalizePath(fullPath.replace(basename(fullPath), path))
-				console.log("newPath", newPath)
-				setTimeout(async () => {
-					const newFile = this.app.vault.getAbstractFileByPath(
-						newPath)
-					console.log("newFile", newFile)
-				},300)
-				// await leaf.openFile(newFile)
-				window.location.reload()
+					file as TFile, title)
 
 
-			}, 400)
+				// const fullPath = normalizePath(await (this.app as any).vault.adapter.getFullPath(file.path))
+				// // const oldPath = workspace.activeLeaf.view.file.path
+				// workspace.activeLeaf.view.file.path = path
+				// workspace.activeLeaf.detach()
+				// await this.app.fileManager.renameFile(
+				// 	file as TFile, `tutu.canvas`)
+				// this.deleteFile(fullPath)
+				// const leaf = await workspace.getLeaf('tab')
+				// 	.setViewState({
+				// 		active: true,
+				// 	});
+
+				// const newPath = normalizePath(fullPath.replace(basename(fullPath), path))
+				// console.log("newPath", newPath)
+				// setTimeout(async () => {
+				// 	const newFile = this.app.vault.getAbstractFileByPath(
+				// 		newPath)
+				// 	console.log("newFile", newFile)
+				// },300)
+				// // await leaf.openFile(newFile)
+				// window.location.reload()
+
+			}, 150)
 
 
 			// console.log("file", file)
@@ -73,6 +87,25 @@ export default class DailyCanvas extends Plugin {
 		{
 			if (filePathToDelete) unlink(filePathToDelete)
 		};
+	}
+
+	getLeaves = (title: string): WorkspaceLeaf[] => {
+		const { workspace } = this.app
+		const leavesList: WorkspaceLeaf[] = [];
+
+		workspace.iterateAllLeaves((leaf: WorkspaceLeaf) => {
+			console.log("title", title)
+			console.log("leaf", leaf.getViewState())
+			console.log("this.getPath(leaf)", this.getPath(leaf))
+			if (this.getPath(leaf) && this.getPath(leaf) === title) {
+				return []
+			}
+		});
+		return leavesList;
+	}
+
+	getPath(leaf: WorkspaceLeaf | null | undefined) {
+		return leaf?.getViewState().state.file.path || ""
 	}
 
 	absolutePath(file: string) {
