@@ -1,91 +1,100 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
-
+import moment from 'moment';
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TAbstractFile, TFile, normalizePath } from 'obsidian';
+import { unlink } from 'fs/promises'
+import { basename} from "path";
 // Remember to rename these classes and interfaces!
 
-interface MyPluginSettings {
+interface DailyCanvasSettings {
 	mySetting: string;
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
+const DEFAULT_SETTINGS: DailyCanvasSettings = {
 	mySetting: 'default'
 }
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class DailyCanvas extends Plugin {
+	settings: DailyCanvasSettings;
 
 	async onload() {
 		await this.loadSettings();
 
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
+		this.addRibbonIcon('pen-tool', 'Daily Canvas', async () => {
+			const { workspace } = (this.app as any)
+			const leaf = await workspace.getLeaf('tab')
+				.setViewState({
+					active: true, // same as leaf.reveal()
+				}); //new active tab 
+			await (this.app as any).commands.executeCommandById(
+				"canvas:new-file"
+			);
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
+			const path = "tutu.canvas"
+			setTimeout(async () => {
+				const file = workspace.getActiveFile()
+				const fullPath = normalizePath(await (this.app as any).vault.adapter.getFullPath(file.path))
+				// const oldPath = workspace.activeLeaf.view.file.path
+				workspace.activeLeaf.view.file.path = path
+				workspace.activeLeaf.detach()
+				await this.app.fileManager.renameFile(
+					file as TFile, `tutu.canvas`)
+				this.deleteFile(fullPath)
+				const leaf = await workspace.getLeaf('tab')
+					.setViewState({
+						active: true,
+					});
+				
+				const newPath = normalizePath(fullPath.replace(basename(fullPath), path))
+				console.log("newPath", newPath)
+				setTimeout(async () => {
+					const newFile = this.app.vault.getAbstractFileByPath(
+						newPath)
+					console.log("newFile", newFile)
+				},300)
+				// await leaf.openFile(newFile)
+				window.location.reload()
 
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
 
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-			}
-		});
+			}, 400)
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
 
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
+			// console.log("file", file)
+			// this.app.fileManager.renameFile(
+			// 	file as TAbstractFile, `${moment().format("YYYY-MM-DD")}.canvas`)
+
+			// if (file?.path)
+			// 	setTimeout(async () => (await this.app.fileManager.renameFile(
+			// 		leaf?.view?.file as TFile, `tutu.canvas`)), 400)
 		});
 
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
+		this.addSettingTab(new DailyCanvasSettingTab(this.app, this));
 	}
 
-	onunload() {
+	async deleteFile(filePathToDelete: string) {
+		{
+			if (filePathToDelete) unlink(filePathToDelete)
+		};
+	}
 
+	absolutePath(file: string) {
+		const vaultName = this.app.vault.getName();
+		return (
+			"obsidian://open?vault=" +
+			encodeURIComponent(vaultName) +
+			String.raw`&file=` +
+			encodeURIComponent(file)
+		);
+	}
+
+	getFileFromVault(path: string) {
+		this.app.vault.getAbstractFileByPath(
+			normalizePath(path)
+		)
 	}
 
 	async loadSettings() {
 		this.settings = {
 			...DEFAULT_SETTINGS, ...await this.loadData()
-		}		
+		}
 	}
 
 	async saveSettings() {
@@ -93,30 +102,15 @@ export default class MyPlugin extends Plugin {
 	}
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
 
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
-}
-
-class SampleSettingTab extends PluginSettingTab {
-	constructor(app: App, public plugin: MyPlugin) {
+class DailyCanvasSettingTab extends PluginSettingTab {
+	constructor(app: App, public plugin: DailyCanvas) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
 
 	display(): void {
-		const {containerEl} = this;
+		const { containerEl } = this;
 
 		containerEl.empty();
 
@@ -132,3 +126,19 @@ class SampleSettingTab extends PluginSettingTab {
 				}));
 	}
 }
+
+
+
+// setTimeout(async () => {
+// 	const oldState = workspace.getLeaf(false).getViewState()
+// 	await workspace.activeLeaf.setViewState({
+// 		...oldState,
+// 		state: {
+// 			...oldState.state,
+// 			file: path
+// 		}
+// 	});
+// 	const newState = await workspace.activeLeaf.getViewState()
+// 	console.log("newState", newState)
+
+// }, 500)
